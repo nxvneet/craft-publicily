@@ -1,0 +1,6 @@
+# local dev/test artifacts — not needed for the deployment
+scripts/
+shots/
+*.log
+.next
+node_modules

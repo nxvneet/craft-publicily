@@ -1,0 +1,16 @@
+import { chromium } from "playwright";
+const b = await chromium.launch({ headless: true, args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
+const p = await (await b.newContext({ viewport:{width:1600,height:900}, deviceScaleFactor:1.3 })).newPage();
+await p.addInitScript(() => sessionStorage.setItem("voxel.intro","1"));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+await p.goto("http://localhost:3000/create?p="+encodeURIComponent("a quiet brutalist architecture studio"), { waitUntil:"domcontentloaded" });
+await wait(7000);
+await p.screenshot({ path:"shots/b-customize.png" });
+console.log("customize");
+await p.getByRole("button",{name:"content"}).click(); await wait(1200);
+await p.screenshot({ path:"shots/b-content.png" });
+console.log("content");
+await p.getByRole("button",{name:"ship"}).click(); await wait(1000);
+await p.screenshot({ path:"shots/b-ship.png" });
+console.log("ship");
+await b.close();
