@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { SceneCanvas } from "./SceneCanvas";
+import { SiteRenderer } from "./SiteRenderer";
 import { PRESETS, type SceneConfig, type Geometry, type Motion } from "@/lib/scenes";
 import { generateSiteSpec, type SiteSpec, type Section } from "@/lib/siteSpec";
 import { refineConfig } from "@/lib/refine";
@@ -78,6 +78,7 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
   const setPalette = (a: string, b: string) => commit({ ...spec, scene: { ...spec.scene, palette: { ...spec.scene.palette, a, b } } });
   const setHero = (patch: Partial<SiteSpec["hero"]>) => commit({ ...spec, hero: { ...spec.hero, ...patch } });
   const setBrand = (patch: Partial<SiteSpec["brand"]>) => commit({ ...spec, brand: { ...spec.brand, ...patch } });
+  const setTheme = (theme: "light" | "dark") => commit({ ...spec, theme });
   const patchSection = (i: number, patch: Partial<Section>) =>
     commit({ ...spec, sections: spec.sections.map((s, j) => (j === i ? ({ ...s, ...patch } as Section) : s)) });
   const toggleSection = (i: number) => patchSection(i, { hidden: !spec.sections[i].hidden });
@@ -136,88 +137,24 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
 
   const accent = config.palette.a;
 
+  const slug = (spec.brand.name || "site").toLowerCase().replace(/\s+/g, "-");
+
   return (
-    <div className="relative h-[100svh] w-full overflow-hidden bg-ink">
-      {/* live scene */}
-      <div className="absolute inset-0">
-        <SceneCanvas config={config} autoplay interactive composeLeft />
-      </div>
-      <div className="pointer-events-none absolute inset-0 z-[6] bg-gradient-to-r from-ink via-ink/55 to-transparent md:via-ink/25" />
-      <div className="pointer-events-none absolute inset-0 z-[6] bg-gradient-to-t from-ink/70 via-transparent to-ink/40" />
-
-      {/* editable website preview */}
-      <div className="absolute inset-0 z-10 flex items-center">
-        <div className="w-full px-8 md:pl-[26rem] md:pr-12">
-          <motion.div
-            key={config.id + spec.sections.length}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: generating ? 0 : 1, y: generating ? 24 : 0 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="pointer-events-none max-w-lg"
-          >
-            <Editable
-              value={`${spec.brand.name} · ${spec.hero.eyebrow}`}
-              onCommit={(v) => setBrand({ name: v.split("·")[0]?.trim() || spec.brand.name })}
-              className="pointer-events-auto inline-block text-[11px] uppercase tracking-[0.3em]"
-              style={{ color: accent }}
-              single
-            />
-            <Editable
-              value={spec.hero.headline}
-              onCommit={(v) => setHero({ headline: v })}
-              className="pointer-events-auto mt-4 block text-5xl font-medium leading-[0.95] tracking-[-0.03em] text-cream md:text-7xl"
-            />
-            <Editable
-              value={spec.hero.sub}
-              onCommit={(v) => setHero({ sub: v })}
-              className="pointer-events-auto mt-5 block max-w-md text-base text-cream/70 md:text-lg"
-            />
-            <span className="pointer-events-auto mt-7 inline-block rounded-full px-6 py-3 text-sm font-semibold text-ink" style={{ background: accent }}>
-              <Editable value={spec.hero.cta} onCommit={(v) => setHero({ cta: v })} className="inline-block" single /> →
-            </span>
-            <div className="mt-8 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.25em] text-cream/40">{spec.sections.filter((s) => !s.hidden).length + 2} sections ↓</span>
-              {["hero", ...spec.sections.filter((s) => !s.hidden).map((x) => x.type), "footer"].map((t, i) => (
-                <span key={i} className="rounded-full border border-ink-line bg-ink/40 px-2 py-0.5 text-[10px] capitalize text-cream/60 backdrop-blur-sm">{t}</span>
-              ))}
-            </div>
-            <p className="mt-4 text-[10px] uppercase tracking-[0.2em] text-cream/30">✎ click any text to edit it</p>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* ── top toolbar ───────────────────────────────────────────────────── */}
-      <div className="absolute left-0 top-0 z-30 flex w-full items-center justify-between gap-3 p-4">
-        <div className="flex items-center gap-3">
-          <Link href="/" data-cursor="hover" className="flex items-center gap-2"><span className="block h-4 w-4 rotate-45 border-2 border-cream" /></Link>
-          <div className="hidden sm:block">
-            <div className="text-sm font-semibold leading-none text-cream">{spec.brand.name}</div>
-            <div className="mt-0.5 text-[10px] uppercase tracking-wider text-cream-dim">{spec.industry} · {config.geometry}</div>
+    <div className="relative flex h-[100svh] w-full overflow-hidden bg-[#08080b] text-cream">
+      {/* ── sidebar ─────────────────────────────────────────────────────── */}
+      <aside className="z-20 flex h-full w-[340px] shrink-0 flex-col border-r border-ink-line bg-ink">
+        <div className="flex items-center gap-3 border-b border-ink-line px-5 py-4">
+          <Link href="/" data-cursor="hover" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ink-line"><span className="block h-3.5 w-3.5 rotate-45 border-2 border-cream" /></Link>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold leading-tight">{spec.brand.name}</div>
+            <div className="truncate text-[10px] uppercase tracking-[0.18em] text-cream-dim">{spec.industry} · {spec.theme ?? "dark"} · {config.geometry}</div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <ToolBtn label="Undo" onClick={undo} disabled={past.current.length === 0}>↺</ToolBtn>
-          <ToolBtn label="Redo" onClick={redo} disabled={future.current.length === 0}>↻</ToolBtn>
-          <div className="mx-1 h-6 w-px bg-ink-line" />
-          <ToolBtn label="Export" onClick={download}>↓</ToolBtn>
-          <Link href="/dashboard" data-cursor="hover" className="hairline hidden rounded-full bg-ink/60 px-4 py-2 text-sm backdrop-blur-md sm:block">My sites</Link>
-          <button onClick={publish} disabled={publishing} data-cursor="hover" className="noise-btn hairline rounded-full bg-acid px-5 py-2 text-sm font-semibold text-ink disabled:opacity-60">
-            {publishing ? "Publishing…" : "Publish ↗"}
-          </button>
-        </div>
-      </div>
 
-      {/* ── left editor panel ─────────────────────────────────────────────── */}
-      <aside className="absolute left-4 top-[4.5rem] z-20 flex max-h-[calc(100svh-9.5rem)] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink/80 backdrop-blur-2xl">
-        {/* tabs */}
         <div className="flex shrink-0 border-b border-ink-line">
           {(["customize", "content", "ship"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              data-cursor="hover"
-              className={`relative flex-1 py-3.5 text-sm font-medium capitalize transition-colors ${tab === t ? "text-cream" : "text-cream-dim hover:text-cream"}`}
-            >
+            <button key={t} onClick={() => setTab(t)} data-cursor="hover"
+              className={`relative flex-1 py-3.5 text-sm font-medium capitalize transition-colors ${tab === t ? "text-cream" : "text-cream-dim hover:text-cream"}`}>
               {t}
               {tab === t && <motion.span layoutId="tabline" className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-acid" />}
             </button>
@@ -237,6 +174,10 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                 </div>
               </Group>
 
+              <Group label="Theme">
+                <Segmented options={["light", "dark"]} value={spec.theme ?? "dark"} onChange={(v) => setTheme(v as "light" | "dark")} />
+              </Group>
+
               <Group label="Palette">
                 <div className="flex flex-wrap gap-2.5">
                   {SWATCHES.map((s) => (
@@ -247,12 +188,8 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                 </div>
               </Group>
 
-              <Group label="Form">
-                <Segmented options={GEOMETRIES} value={config.geometry} onChange={(g) => setScene({ geometry: g as Geometry })} />
-              </Group>
-              <Group label="Motion">
-                <Segmented options={MOTIONS} value={config.motion} onChange={(m) => setScene({ motion: m as Motion })} />
-              </Group>
+              <Group label="3D form"><Segmented options={GEOMETRIES} value={config.geometry} onChange={(g) => setScene({ geometry: g as Geometry })} /></Group>
+              <Group label="Motion"><Segmented options={MOTIONS} value={config.motion} onChange={(m) => setScene({ motion: m as Motion })} /></Group>
 
               <Slider label="Density" value={config.density} onChange={(v) => setScene({ density: v })} accent={accent} />
               <Slider label="Distortion" value={config.distort} onChange={(v) => setScene({ distort: v })} accent={accent} />
@@ -270,6 +207,18 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                   ))}
                 </div>
                 {log.length > 0 && <ul className="mt-3 space-y-1 text-[11px] text-cream-dim/70">{log.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+              </Group>
+
+              <Group label="Style presets">
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESETS.map((p) => (
+                    <button key={p.id} onClick={() => applyPreset(p)} data-cursor="hover"
+                      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${config.palette.a === p.palette.a ? "border-cream text-cream" : "border-ink-line text-cream-dim hover:text-cream"}`}>
+                      <span className="h-3.5 w-3.5 rounded-full" style={{ background: `linear-gradient(135deg, ${p.palette.a}, ${p.palette.b})` }} />
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
               </Group>
             </div>
           )}
@@ -299,14 +248,14 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-cream-dim/60">Reorder with ▲▼, toggle visibility with ●. Edit copy by clicking text in the preview.</p>
+                <p className="mt-2 text-[11px] text-cream-dim/60">Reorder with ▲▼, toggle visibility with ●.</p>
               </Group>
             </div>
           )}
 
           {tab === "ship" && (
             <div className="flex flex-col gap-5">
-              <p className="text-[13px] leading-relaxed text-cream-dim">Publish to a free <span className="text-cream">voxel.site</span> subdomain, or export the code. Same flow as the builder.</p>
+              <p className="text-[13px] leading-relaxed text-cream-dim">Publish to a free <span className="text-cream">voxel.site</span> subdomain, or export the code.</p>
               <div className="rounded-xl border border-acid/30 bg-acid/5 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-cream"><span style={{ color: accent }}>✦</span> Publish to Voxel</div>
                 <p className="mt-1 text-[12px] text-cream-dim">Get a live, shareable URL instantly.</p>
@@ -321,24 +270,47 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                 </div>
               </div>
               <button onClick={download} data-cursor="hover" className="hairline rounded-lg py-2.5 text-sm font-medium text-cream">Download HTML ↓</button>
-              <button data-cursor="hover" className="hairline rounded-lg py-2.5 text-sm text-cream-dim">Download code · ZIP (Pro)</button>
               <Link href="/#pricing" data-cursor="hover" className="text-center text-[12px] text-cream-dim underline-offset-2 hover:underline">Growth: analytics, billing, forms →</Link>
             </div>
           )}
         </div>
       </aside>
 
-      {/* ── bottom preset rail ────────────────────────────────────────────── */}
-      <div className="absolute bottom-4 left-4 right-4 z-20 md:left-[25.5rem]">
-        <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-ink-line bg-ink/70 p-2 backdrop-blur-xl [scrollbar-width:none]">
-          <span className="shrink-0 px-2 text-[10px] uppercase tracking-[0.2em] text-cream-dim">Styles</span>
-          {PRESETS.map((p) => (
-            <button key={p.id} onClick={() => applyPreset(p)} data-cursor="hover"
-              className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${config.palette.a === p.palette.a ? "border-cream text-cream" : "border-ink-line text-cream-dim hover:text-cream"}`}>
-              <span className="h-4 w-4 rounded-full" style={{ background: `linear-gradient(135deg, ${p.palette.a}, ${p.palette.b})` }} />
-              {p.name}
+      {/* ── workspace ───────────────────────────────────────────────────── */}
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        {/* top bar */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-line px-5 py-3">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-cream-dim">
+            <span>Preview</span><span className="opacity-40">/</span><span className="text-cream">{spec.brand.name}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ToolBtn label="Undo" onClick={undo} disabled={past.current.length === 0}>↺</ToolBtn>
+            <ToolBtn label="Redo" onClick={redo} disabled={future.current.length === 0}>↻</ToolBtn>
+            <div className="mx-1 h-6 w-px bg-ink-line" />
+            <ToolBtn label="Export HTML" onClick={download}>↓</ToolBtn>
+            <Link href="/dashboard" data-cursor="hover" className="hairline hidden rounded-full bg-ink/60 px-4 py-2 text-sm backdrop-blur-md sm:block">My sites</Link>
+            <button onClick={publish} disabled={publishing} data-cursor="hover" className="noise-btn hairline rounded-full bg-acid px-5 py-2 text-sm font-semibold text-ink disabled:opacity-60">
+              {publishing ? "Publishing…" : "Publish ↗"}
             </button>
-          ))}
+          </div>
+        </div>
+
+        {/* live full-site preview in a browser frame */}
+        <div className="relative flex-1 overflow-hidden bg-[#0b0b0e] p-4 md:p-6">
+          <div className="mx-auto flex h-full max-w-[1340px] flex-col overflow-hidden rounded-xl border border-ink-line shadow-2xl shadow-black/60">
+            <div className="flex shrink-0 items-center gap-3 border-b border-ink-line bg-ink px-4 py-2.5">
+              <div className="flex gap-1.5">{["#ff5f57", "#febc2e", "#28c840"].map((c) => <span key={c} className="h-3 w-3 rounded-full" style={{ background: c }} />)}</div>
+              <div className="flex flex-1 justify-center">
+                <span className="rounded-md bg-ink-soft px-3 py-1 font-mono text-[11px] text-cream-dim">{slug}.voxel.site</span>
+              </div>
+              <button onClick={() => regenerate()} disabled={generating} data-cursor="hover" title="Regenerate" className="text-cream-dim transition-colors hover:text-cream disabled:opacity-40">
+                <span className={generating ? "inline-block animate-spin" : ""}>⟳</span>
+              </button>
+            </div>
+            <div className="relative flex-1 overflow-y-auto overscroll-contain">
+              <SiteRenderer key={config.id + spec.brand.name + (spec.theme ?? "")} spec={spec} watermark={false} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -366,36 +338,6 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
 }
 
 // ── small components ─────────────────────────────────────────────────────────
-function Editable({ value, onCommit, className, style, single }: { value: string; onCommit: (v: string) => void; className?: string; style?: React.CSSProperties; single?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  return (
-    <span
-      key={value}
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      spellCheck={false}
-      data-cursor="hover"
-      onMouseDown={(e) => e.stopPropagation()}
-      onBlur={() => {
-        const t = (ref.current?.innerText || "").trim();
-        if (t && t !== value) onCommit(t);
-        else if (ref.current) ref.current.innerText = value;
-      }}
-      onKeyDown={(e) => {
-        if (single && e.key === "Enter") {
-          e.preventDefault();
-          (e.currentTarget as HTMLElement).blur();
-        }
-      }}
-      className={className}
-      style={{ outline: "none", ...style }}
-    >
-      {value}
-    </span>
-  );
-}
-
 function ToolBtn({ children, label, onClick, disabled }: { children: React.ReactNode; label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button onClick={onClick} disabled={disabled} data-cursor="hover" title={label}

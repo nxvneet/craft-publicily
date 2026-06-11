@@ -14,7 +14,7 @@ const str = (v: unknown, fb: string, max = 240) => (typeof v === "string" && v.t
 const SYSTEM = `You are a brand strategist, conversion copywriter and art director for an award-winning web studio. Given a brief, design a single-scroll landing page. Return ONLY JSON, no prose:
 {
  "brand": {"name": string (short, brandable), "tagline": string},
- "design": {"a": hex accent, "b": hex secondary, "bg": hex very-dark, "geometry": one of ["orb","crystal","torus","monolith","wave"], "motion": one of ["calm","orbit","kinetic"], "typeStyle": one of ["grotesk","editorial","mono","display"]},
+ "design": {"a": hex accent, "b": hex secondary, "bg": hex very-dark, "theme": one of ["light","dark"] (light = refined editorial on warm paper; dark = cinematic gallery), "geometry": one of ["orb","crystal","torus","monolith","wave"], "motion": one of ["calm","orbit","kinetic"], "typeStyle": one of ["grotesk","editorial","mono","display"]},
  "hero": {"eyebrow": string (2-4 words), "headline": string (punchy, <=6 words), "sub": string (one sentence), "cta": string (1-3 words)},
  "sections": [
    {"type":"marquee","items":[6 short ALL-CAPS phrases]},
@@ -99,6 +99,7 @@ export async function POST(req: Request) {
         motion: MOTIONS.includes(j?.design?.motion) ? (j.design.motion as Motion) : base.scene.motion,
       },
       typeStyle: ["grotesk", "editorial", "mono", "display"].includes(j?.design?.typeStyle) ? j.design.typeStyle : base.typeStyle,
+      theme: j?.design?.theme === "light" || j?.design?.theme === "dark" ? j.design.theme : base.theme,
       brand: { name: str(j?.brand?.name, base.brand.name, 32), tagline: str(j?.brand?.tagline, base.brand.tagline, 80) },
       hero: {
         eyebrow: str(j?.hero?.eyebrow, base.hero.eyebrow, 40),

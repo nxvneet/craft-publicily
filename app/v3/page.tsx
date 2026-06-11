@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SphereGallery } from "@/components/sphere/SphereGallery";
-import { ProjectPage } from "@/components/sphere/ProjectPage";
+import { ProjectSite } from "@/components/sphere/ProjectSite";
 import { CreateFlow } from "@/components/sphere/CreateFlow";
 import { InfoOverlay, type PanelKind } from "@/components/sphere/InfoOverlay";
 import { VersionTabs } from "@/components/VersionTabs";
@@ -147,7 +147,7 @@ export default function SphericalPage() {
         </button>
       </div>
 
-      <ProjectPage project={active} onClose={() => setActive(null)} />
+      <ProjectSite project={active} onClose={() => setActive(null)} onOpen={setActive} />
       <InfoOverlay kind={panel} onClose={() => setPanel(null)} />
       <CreateFlow prompt={genPrompt} onClose={() => setGenPrompt(null)} />
     </main>

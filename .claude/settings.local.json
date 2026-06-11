@@ -100,7 +100,27 @@
       "Bash(gh repo *)",
       "Bash(echo \"BUILD EXIT $?\")",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git config *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(echo \"commit exit $?\")",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --virtual-time-budget=6000 --dump-dom http://localhost:3210/v3?site=haunting-london)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3210/v3)",
+      "Bash(sed -n '1,30p' app/v3/page.tsx)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --virtual-time-budget=8000 --dump-dom http://localhost:3210/v3?site=haunting-london)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 40, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 40, opacity: 0 }}/g' components/sphere/ProjectSite.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 36, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 36, opacity: 0 }}/g' components/sphere/ProjectSite.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 50, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 50, opacity: 0 }}/g' components/sphere/ProjectSite.tsx)",
+      "Bash(sed -i '' 's/generateSiteSpec\\(\"a bold sneaker drop store, limited fashion brand\"\\)/generateSiteSpec\\(\"a living 3d website\"\\)/' \"app/s/[id]/page.tsx\")",
+      "Bash(sed -i '' 's/const UP_NOANIM = true; \\\\/\\\\/ TEMP/const UP_NOANIM = false;/' components/SiteRenderer.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 34, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 34, opacity: 0 }}/g' components/SiteRenderer.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { opacity: 0 }}/g' components/SiteRenderer.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 40, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 40, opacity: 0 }}/g' components/SiteRenderer.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 20, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 20, opacity: 0 }}/g' components/SiteRenderer.tsx)",
+      "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 16, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 16, opacity: 0 }}/g' components/SiteRenderer.tsx)",
+      "Bash(grep -E \"\\\\.env\\\\.local|\\\\.env$\")",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"commit $?\")"
     ]
   }
 }

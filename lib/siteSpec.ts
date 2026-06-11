@@ -27,9 +27,20 @@ export type SiteSpec = {
   image: string; // cinematic WebGL hero environment (depth-parallax)
   industry: string;
   typeStyle: TypeStyle;
+  theme?: "light" | "dark"; // editorial light or gallery dark
   brand: { name: string; tagline: string };
   hero: { eyebrow: string; headline: string; sub: string; cta: string };
   sections: Section[];
+};
+
+// Light = refined editorial; dark = cinematic gallery. Drives the renderer.
+const INDUSTRY_THEME: Record<string, "light" | "dark"> = {
+  saas: "dark",
+  ai: "dark",
+  finance: "light",
+  studio: "light",
+  wellness: "light",
+  commerce: "dark",
 };
 
 // Industry → cinematic hero environment (rendered as live depth-parallax WebGL).
@@ -313,6 +324,7 @@ export function generateSiteSpec(prompt: string): SiteSpec {
     image: INDUSTRY_IMAGE[ind.key] ?? "/cine/bloom.png",
     industry: ind.key,
     typeStyle: ind.type,
+    theme: INDUSTRY_THEME[ind.key] ?? "dark",
     brand: { name, tagline },
     hero: {
       eyebrow: `${cap(ind.key)} · ${scene.geometry}`,
