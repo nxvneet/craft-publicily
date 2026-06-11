@@ -1,342 +1,400 @@
 // ─────────────────────────────────────────────────────────────────────────
-// SiteSpec — the structured website definition the whole product renders.
+// SiteSpec v3 — a PROMPT-DRIVEN page, not a recolored template.
 //
-// Mirrors how real prompt→site systems (Relume, v0, Lovable) work:
-//   intent → information architecture (sections) → copywriting → design tokens.
-// The LLM (see /api/generate) emits this shape as schema-validated JSON; the
-// deterministic generator below produces a solid version instantly with no key.
+// A site is an ordered list of typed blocks (hero, menu, gallery, pricing,
+// team, faq, …) chosen and composed per prompt. Different intents produce
+// different STRUCTURES — a restaurant gets a menu + hours, a portfolio gets a
+// masonry gallery, a SaaS gets pricing + a product hero. The LLM (see
+// /api/generate) composes this shape; the deterministic composer below builds
+// an intent-tailored version instantly with no API key.
 // ─────────────────────────────────────────────────────────────────────────
 
 import { generateScene, type SceneConfig } from "./scenes";
 
-export type TypeStyle = "grotesk" | "editorial" | "mono" | "display";
+export type Theme = "light" | "dark";
+export type FontPair = "grotesk" | "editorial" | "mono" | "display";
 
-type Hideable = { hidden?: boolean };
-export type Section =
-  | ({ type: "marquee"; items: string[] } & Hideable)
-  | ({ type: "features"; kicker: string; title: string; items: { title: string; body: string }[] } & Hideable)
-  | ({ type: "stats"; kicker: string; items: { value: string; label: string }[] } & Hideable)
-  | ({ type: "steps"; kicker: string; title: string; items: { title: string; body: string }[] } & Hideable)
-  | ({ type: "showcase"; kicker: string; title: string; items: { title: string; tag: string }[] } & Hideable)
-  | ({ type: "quote"; quote: string; author: string; role: string } & Hideable)
-  | ({ type: "cta"; title: string; button: string } & Hideable);
+export type Tokens = {
+  theme: Theme;
+  palette: { bg: string; a: string; b: string };
+  font: FontPair;
+  radius: "sharp" | "soft" | "pill";
+};
+
+type H = { hidden?: boolean };
+export type Block =
+  | ({ type: "hero"; variant: "split" | "centered" | "fullbleed" | "editorial"; eyebrow: string; headline: string; sub: string; cta: string; media: "3d" | "image" | "none" } & H)
+  | ({ type: "marquee"; items: string[] } & H)
+  | ({ type: "logos"; label: string; items: string[] } & H)
+  | ({ type: "statement"; text: string } & H)
+  | ({ type: "features"; variant: "rows" | "grid" | "bento"; kicker: string; title: string; items: { title: string; body: string }[] } & H)
+  | ({ type: "gallery"; variant: "masonry" | "grid"; kicker: string; title: string; items: { title: string; tag: string }[] } & H)
+  | ({ type: "menu"; kicker: string; title: string; items: { name: string; price: string; desc: string }[] } & H)
+  | ({ type: "steps"; kicker: string; title: string; items: { title: string; body: string }[] } & H)
+  | ({ type: "stats"; kicker: string; items: { value: string; label: string }[] } & H)
+  | ({ type: "team"; kicker: string; title: string; items: { name: string; role: string }[] } & H)
+  | ({ type: "testimonials"; kicker: string; items: { quote: string; author: string; role: string }[] } & H)
+  | ({ type: "pricing"; kicker: string; title: string; tiers: { name: string; price: string; period: string; features: string[]; cta: string; featured?: boolean }[] } & H)
+  | ({ type: "faq"; kicker: string; title: string; items: { q: string; a: string }[] } & H)
+  | ({ type: "cta"; title: string; button: string } & H)
+  | ({ type: "contact"; kicker: string; title: string; email: string; note: string } & H);
+
+export type BlockType = Block["type"];
 
 export type SiteSpec = {
-  v: 2;
+  v: 3;
+  archetype: string;
   scene: SceneConfig;
-  image: string; // cinematic WebGL hero environment (depth-parallax)
-  industry: string;
-  typeStyle: TypeStyle;
-  theme?: "light" | "dark"; // editorial light or gallery dark
+  image: string;
+  tokens: Tokens;
   brand: { name: string; tagline: string };
-  hero: { eyebrow: string; headline: string; sub: string; cta: string };
-  sections: Section[];
+  nav: { links: string[]; cta: string };
+  blocks: Block[];
+  // legacy compatibility shims (some old code reads these)
+  industry: string;
+  typeStyle: FontPair;
+  theme?: Theme;
 };
 
-// Light = refined editorial; dark = cinematic gallery. Drives the renderer.
-const INDUSTRY_THEME: Record<string, "light" | "dark"> = {
-  saas: "dark",
-  ai: "dark",
-  finance: "light",
-  studio: "light",
-  wellness: "light",
-  commerce: "dark",
+/* ── palettes (a = accent, contrasts with bg) ───────────────────────────── */
+const PAL = {
+  acid: { bg: "#0b0b10", a: "#d8ff3e", b: "#7b5cff" },
+  ocean: { bg: "#04101e", a: "#3ec8ff", b: "#0a7cff" },
+  ember: { bg: "#140604", a: "#ff5c38", b: "#ffb000" },
+  violet: { bg: "#0a0613", a: "#a98bff", b: "#5c3cff" },
+  rose: { bg: "#160a12", a: "#ff6fb5", b: "#a45cff" },
+  paper: { bg: "#f4f1ea", a: "#d4452c", b: "#1b1a17" },
+  sage: { bg: "#eef1ea", a: "#56714e", b: "#222a1d" },
+  bone: { bg: "#f3efe6", a: "#161514", b: "#8a8276" },
+  sky: { bg: "#eef2f6", a: "#1f5fd6", b: "#10213d" },
 };
-
-// Industry → cinematic hero environment (rendered as live depth-parallax WebGL).
-// In production a model generates a bespoke image per prompt; these are the
-// baked, AI-generated (Higgsfield) defaults that ship today.
-const INDUSTRY_IMAGE: Record<string, string> = {
-  ai: "/cine/cyber.png",
-  saas: "/cine/cyber.png",
-  finance: "/cine/cyber.png",
-  studio: "/cine/studio.png",
-  wellness: "/cine/bloom.png",
-  commerce: "/cine/bloom.png",
-};
-
-// ── industry vocabularies ──────────────────────────────────────────────────
-type Industry = {
-  key: string;
-  words: string[];
-  type: TypeStyle;
-  nouns: string[]; // the "thing" the brand makes
-  benefits: string[];
-  features: { title: string; body: string }[];
-  steps: { title: string; body: string }[];
-  stats: { value: string; label: string }[];
-  showcase: { title: string; tag: string }[];
-  quote: { quote: string; author: string; role: string };
-  marquee: string[];
-};
-
-const INDUSTRIES: Industry[] = [
-  {
-    key: "saas",
-    words: ["saas", "platform", "software", "tool", "dashboard", "workflow", "productivity", "developer", "api"],
-    type: "grotesk",
-    nouns: ["the platform", "the workspace", "the product"],
-    benefits: ["ship faster", "stay in flow", "scale without friction"],
-    features: [
-      { title: "Built for speed", body: "Everything is one keystroke away. No loading spinners, no context-switching — just momentum." },
-      { title: "Plays well with your stack", body: "Native integrations and a clean API mean it slots into the tools your team already lives in." },
-      { title: "Secure by default", body: "SOC 2, SSO, and granular roles out of the box. Enterprise-ready from day one." },
-      { title: "Insight that compounds", body: "Real-time analytics surface what matters, so every decision is backed by data." },
-    ],
-    steps: [
-      { title: "Connect", body: "Link your sources in a click. We handle the plumbing." },
-      { title: "Configure", body: "Tune it to your workflow with sensible defaults." },
-      { title: "Ship", body: "Go live in minutes and iterate without fear." },
-    ],
-    stats: [
-      { value: "10×", label: "faster to launch" },
-      { value: "99.99%", label: "uptime SLA" },
-      { value: "40k+", label: "teams onboarded" },
-    ],
-    showcase: [
-      { title: "Automations", tag: "Workflow" },
-      { title: "Live analytics", tag: "Insight" },
-      { title: "Open API", tag: "Developer" },
-    ],
-    quote: { quote: "It replaced four tools and made our team feel twice as fast.", author: "Maya Chen", role: "VP Engineering, Northwind" },
-    marquee: ["FAST", "SECURE", "SCALABLE", "OPEN API", "REAL-TIME", "BUILT TO SHIP"],
-  },
-  {
-    key: "ai",
-    words: ["ai", "agent", "neural", "model", "intelligence", "automation", "ml", "copilot", "gpt"],
-    type: "mono",
-    nouns: ["the engine", "the agent", "the model"],
-    benefits: ["think faster", "automate the busywork", "see around corners"],
-    features: [
-      { title: "Reasoning, not guessing", body: "A model that explains itself — every output is grounded, traceable, and yours to audit." },
-      { title: "Runs where you do", body: "Cloud, on-prem, or edge. Your data never leaves your perimeter unless you say so." },
-      { title: "Improves with use", body: "It learns your patterns and gets sharper every session — without you lifting a finger." },
-      { title: "Human in the loop", body: "Approve, correct, or override. The agent works for you, never around you." },
-    ],
-    steps: [
-      { title: "Describe", body: "Tell it the outcome you want in plain language." },
-      { title: "Delegate", body: "It plans, acts, and checks its own work." },
-      { title: "Review", body: "Approve the result or steer it in one line." },
-    ],
-    stats: [
-      { value: "92%", label: "tasks fully automated" },
-      { value: "<200ms", label: "median latency" },
-      { value: "12M", label: "decisions / day" },
-    ],
-    showcase: [
-      { title: "Autonomous agents", tag: "Automate" },
-      { title: "Grounded answers", tag: "Trust" },
-      { title: "Custom models", tag: "Adapt" },
-    ],
-    quote: { quote: "It does in seconds what used to take my team an afternoon.", author: "Dev Patel", role: "Head of Ops, Lumen" },
-    marquee: ["AUTONOMOUS", "GROUNDED", "PRIVATE", "REAL-TIME", "SELF-IMPROVING", "YOURS"],
-  },
-  {
-    key: "commerce",
-    words: ["shop", "store", "ecommerce", "product", "drink", "brand", "fashion", "sneaker", "launch", "retail"],
-    type: "display",
-    nouns: ["the drop", "the product", "the line"],
-    benefits: ["turn heads", "sell out the drop", "build a cult following"],
-    features: [
-      { title: "Made to be felt", body: "Every detail engineered for the moment it lands in your hands." },
-      { title: "Limited by design", body: "Small batches, big presence. When it's gone, it's gone." },
-      { title: "Ships in 48 hours", body: "Carbon-neutral delivery, tracked end to end, no surprises." },
-      { title: "Loved out loud", body: "Thousands of five-star reviews and a community that keeps coming back." },
-    ],
-    steps: [
-      { title: "Choose", body: "Pick your size, your colourway, your statement." },
-      { title: "Checkout", body: "One tap. Apple Pay, Shop Pay, done." },
-      { title: "Flex", body: "It arrives in days. The rest is up to you." },
-    ],
-    stats: [
-      { value: "4.9★", label: "average rating" },
-      { value: "60k+", label: "units shipped" },
-      { value: "48h", label: "to your door" },
-    ],
-    showcase: [
-      { title: "The signature", tag: "Bestseller" },
-      { title: "Limited drop", tag: "New" },
-      { title: "The essentials", tag: "Everyday" },
-    ],
-    quote: { quote: "Easily the best thing I've bought all year. The packaging alone.", author: "Jordan Vela", role: "Verified buyer" },
-    marquee: ["NEW DROP", "LIMITED", "FREE RETURNS", "SHIPS FAST", "5-STAR", "SOLD OUT SOON"],
-  },
-  {
-    key: "studio",
-    words: ["studio", "agency", "design", "creative", "architecture", "brand", "portfolio", "art", "film"],
-    type: "editorial",
-    nouns: ["the studio", "the practice", "the work"],
-    benefits: ["make it unforgettable", "earn the double-take", "set the standard"],
-    features: [
-      { title: "Ideas with teeth", body: "We don't decorate problems — we dismantle them and rebuild something sharper." },
-      { title: "Craft, obsessively", body: "Every pixel, frame and word is argued over until it earns its place." },
-      { title: "Partners, not vendors", body: "We sit on your side of the table and stay long after launch." },
-    ],
-    steps: [
-      { title: "Listen", body: "We start with the awkward questions nobody else asks." },
-      { title: "Make", body: "We prototype in public and kill our darlings fast." },
-      { title: "Ship", body: "We launch loud and measure what actually moved." },
-    ],
-    stats: [
-      { value: "30+", label: "awards won" },
-      { value: "120", label: "brands shaped" },
-      { value: "15yr", label: "of making" },
-    ],
-    showcase: [
-      { title: "Identity", tag: "Brand" },
-      { title: "Motion", tag: "Film" },
-      { title: "Spatial", tag: "Architecture" },
-    ],
-    quote: { quote: "They gave us a brand people actually screenshot. Sales followed.", author: "Lena Ortiz", role: "Founder, Atelier Nine" },
-    marquee: ["AWARD-WINNING", "BOLD", "MADE BY HAND", "NO TEMPLATES", "SINCE 2009", "STUDIO"],
-  },
-  {
-    key: "wellness",
-    words: ["wellness", "health", "skincare", "care", "calm", "meditation", "fitness", "beauty", "mind", "bloom"],
-    type: "editorial",
-    nouns: ["the ritual", "the practice", "the line"],
-    benefits: ["feel like yourself again", "slow down on purpose", "glow from within"],
-    features: [
-      { title: "Backed by science", body: "Clinically-studied ingredients, nothing you can't pronounce, results you can see." },
-      { title: "Kind to everything", body: "Cruelty-free, reef-safe, and packaged to leave the planet better than we found it." },
-      { title: "A ritual, not a chore", body: "Designed to be the best ninety seconds of your morning." },
-    ],
-    steps: [
-      { title: "Breathe", body: "Begin with one slow, intentional moment." },
-      { title: "Apply", body: "A little goes a long way. Let it absorb." },
-      { title: "Glow", body: "Show up to your day as the calmest person in the room." },
-    ],
-    stats: [
-      { value: "97%", label: "saw results in 2 weeks" },
-      { value: "0", label: "nasties, ever" },
-      { value: "1M+", label: "rituals a month" },
-    ],
-    showcase: [
-      { title: "The serum", tag: "Hero" },
-      { title: "The ritual set", tag: "Bundle" },
-      { title: "The daily", tag: "Everyday" },
-    ],
-    quote: { quote: "Three weeks in and my skin — and honestly my mood — is different.", author: "Sana Iqbal", role: "Verified member" },
-    marquee: ["CLEAN", "CLINICAL", "CRUELTY-FREE", "MADE TO LAST", "FEEL IT", "RITUAL"],
-  },
-  {
-    key: "finance",
-    words: ["fintech", "finance", "bank", "payment", "money", "crypto", "invest", "wallet", "trading"],
-    type: "grotesk",
-    nouns: ["the account", "the app", "the network"],
-    benefits: ["take control of your money", "move money like a message", "grow without guesswork"],
-    features: [
-      { title: "Your money, in motion", body: "Instant transfers, real-time balances, zero hidden fees. Finally, finance that keeps up." },
-      { title: "Safe as houses", body: "Bank-grade encryption, biometric locks, and funds insured to the last cent." },
-      { title: "Grow on autopilot", body: "Round-ups, smart pots and yield that works while you sleep." },
-    ],
-    steps: [
-      { title: "Open", body: "Sign up in three minutes. No paperwork, no branch." },
-      { title: "Fund", body: "Top up from any account, instantly." },
-      { title: "Grow", body: "Spend, save and invest from one beautiful place." },
-    ],
-    stats: [
-      { value: "$0", label: "monthly fees" },
-      { value: "4.6%", label: "APY on savings" },
-      { value: "2M+", label: "accounts opened" },
-    ],
-    showcase: [
-      { title: "Spend", tag: "Card" },
-      { title: "Save", tag: "Vaults" },
-      { title: "Invest", tag: "Markets" },
-    ],
-    quote: { quote: "I closed three apps the week I switched. It just does everything.", author: "Tomás Rivera", role: "Member since 2024" },
-    marquee: ["NO FEES", "INSURED", "INSTANT", "SECURE", "REAL YIELD", "MOVE MONEY"],
-  },
-];
-
-const DEFAULT_INDUSTRY = INDUSTRIES[0];
+type PalKey = keyof typeof PAL;
 
 function hash(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return h;
+  return Math.abs(h);
 }
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const pick = <T,>(arr: T[], seed: number) => arr[seed % arr.length];
 
-function detectIndustry(text: string): Industry {
-  let best = DEFAULT_INDUSTRY;
+function brandName(prompt: string, seed: number): string {
+  const capWord = prompt.split(/\s+/).find((w) => /^[A-Z][a-zA-Z]{2,}$/.test(w));
+  if (capWord) return capWord;
+  const coined = ["Atlas", "Nova", "Halo", "Vela", "Orbit", "Lumen", "Forge", "Onyx", "Aero", "Pulse", "Mire", "Sable", "Hearth", "Quill"];
+  return coined[seed % coined.length];
+}
+
+/* ── archetypes: each composes a DIFFERENT page ─────────────────────────── */
+type Archetype = {
+  key: string;
+  words: string[];
+  theme: Theme;
+  pal: PalKey;
+  font: FontPair;
+  radius: Tokens["radius"];
+  nav: string[];
+  /** build the ordered block list for this intent */
+  build: (ctx: Ctx) => Block[];
+};
+type Ctx = { prompt: string; name: string; seed: number; subject: string };
+
+/* helpers that emit common blocks, themed by intent wording */
+const marquee = (items: string[]): Block => ({ type: "marquee", items });
+const cta = (title: string, button: string): Block => ({ type: "cta", title, button });
+
+const ARCHETYPES: Archetype[] = [
+  {
+    key: "restaurant",
+    words: ["restaurant", "cafe", "café", "coffee", "bistro", "kitchen", "dining", "eatery", "bakery", "bar ", "menu", "food", "pizzeria", "ramen", "sushi", "deli", "brunch"],
+    theme: "dark",
+    pal: "ember",
+    font: "editorial",
+    radius: "soft",
+    nav: ["Menu", "Story", "Visit", "Book"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "fullbleed", eyebrow: "Est. 2024 · Open daily", headline: name, sub: cap(prompt.trim() || `${name} — seasonal plates, natural wine, warm rooms.`), cta: "Book a table", media: "image" },
+      { type: "statement", text: `A short walk from everywhere, ${name} is where the neighbourhood comes to eat slowly.` },
+      { type: "menu", kicker: "The Menu", title: "What we're serving", items: [
+        { name: "Burrata & heirloom tomato", price: "14", desc: "Basil oil, sourdough, sea salt" },
+        { name: "Hand-rolled tagliatelle", price: "19", desc: "Slow ragù, parmesan, pepper" },
+        { name: "Charcoal sea bream", price: "26", desc: "Fennel, lemon, brown butter" },
+        { name: "Dark chocolate tart", price: "11", desc: "Crème fraîche, cocoa nib" },
+      ] },
+      { type: "gallery", variant: "masonry", kicker: "The Room", title: "Inside", items: [
+        { title: "The bar", tag: "Evening" }, { title: "The kitchen", tag: "Open pass" }, { title: "The terrace", tag: "Summer" },
+      ] },
+      { type: "stats", kicker: "Why people come back", items: [
+        { value: "4.9★", label: "1,200 reviews" }, { value: "Mon–Sun", label: "from 5pm" }, { value: "No.7", label: "in the city" },
+      ] },
+      { type: "testimonials", kicker: "Word of mouth", items: [
+        { quote: "The kind of place you cancel other plans for.", author: "The Local Table", role: "Review" },
+      ] },
+      { type: "contact", kicker: "Visit", title: "Find us & book", email: "hello@" + name.toLowerCase() + ".com", note: "12 Ember Lane · walk-ins welcome at the bar" },
+    ],
+  },
+  {
+    key: "portfolio",
+    words: ["portfolio", "photographer", "photography", "designer", "artist", "illustrator", "director", "freelance", "personal site", "my work", "showreel", "creative cv"],
+    theme: "light",
+    pal: "bone",
+    font: "editorial",
+    radius: "sharp",
+    nav: ["Work", "About", "Index", "Contact"],
+    build: ({ name, prompt, subject }) => [
+      { type: "hero", variant: "editorial", eyebrow: `${subject} · Selected work`, headline: name, sub: cap(prompt.trim() || `${name} is a ${subject} working across image, motion and print.`), cta: "View work", media: "none" },
+      { type: "gallery", variant: "masonry", kicker: "Selected", title: "Recent work", items: [
+        { title: "Aperture", tag: "Editorial" }, { title: "Field Notes", tag: "Series" }, { title: "Nocturne", tag: "Personal" }, { title: "Bloom", tag: "Commission" }, { title: "Static", tag: "Motion" },
+      ] },
+      { type: "statement", text: `I make work that earns a second look — quiet, considered, and built to last.` },
+      { type: "logos", label: "Selected clients", items: ["Aesop", "Kinfolk", "MUBI", "Cereal", "Nike", "Wallpaper*"] },
+      { type: "stats", kicker: "A little context", items: [
+        { value: "10yr", label: "making" }, { value: "60+", label: "projects" }, { value: "3", label: "awards" },
+      ] },
+      { type: "contact", kicker: "Say hello", title: "Let's make something", email: "studio@" + name.toLowerCase() + ".com", note: "Available for commissions · worldwide" },
+    ],
+  },
+  {
+    key: "saas",
+    words: ["saas", "app", "software", "platform", "tool", "dashboard", "api", "developer", "startup", "ai", "agent", "automation", "analytics", "crm", "productivity"],
+    theme: "dark",
+    pal: "acid",
+    font: "grotesk",
+    radius: "pill",
+    nav: ["Features", "Pricing", "Docs", "Customers"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "split", eyebrow: "New · v1.0", headline: "Ship faster", sub: cap(prompt.trim() || `${name} is the fastest way to ship — built for teams who hate waiting.`), cta: "Start free", media: "3d" },
+      { type: "logos", label: "Trusted by teams at", items: ["Northwind", "Lumen", "Vela", "Orbit", "Atlas", "Forge"] },
+      { type: "features", variant: "bento", kicker: "Why it works", title: "Everything in one place", items: [
+        { title: "Built for speed", body: "Every action is one keystroke away. No spinners, just momentum." },
+        { title: "Plays with your stack", body: "Native integrations and a clean API slot into what you already use." },
+        { title: "Secure by default", body: "SOC 2, SSO and granular roles, ready on day one." },
+        { title: "Insight that compounds", body: "Real-time analytics so every decision is backed by data." },
+      ] },
+      { type: "stats", kicker: "By the numbers", items: [
+        { value: "10×", label: "faster to launch" }, { value: "99.99%", label: "uptime" }, { value: "40k+", label: "teams" },
+      ] },
+      { type: "steps", kicker: "How it works", title: "Live in three steps", items: [
+        { title: "Connect", body: "Link your sources in a click." }, { title: "Configure", body: "Tune it to your workflow." }, { title: "Ship", body: "Go live in minutes." },
+      ] },
+      { type: "pricing", kicker: "Pricing", title: "Simple, honest pricing", tiers: [
+        { name: "Free", price: "$0", period: "forever", features: ["1 project", "Community support", "Core features"], cta: "Start free" },
+        { name: "Pro", price: "$24", period: "/mo", features: ["Unlimited projects", "Priority support", "Advanced analytics", "API access"], cta: "Go Pro", featured: true },
+        { name: "Team", price: "Custom", period: "", features: ["SSO + roles", "SLA", "Dedicated CSM"], cta: "Contact us" },
+      ] },
+      { type: "faq", kicker: "FAQ", title: "Questions, answered", items: [
+        { q: "Is there a free plan?", a: "Yes — free forever for solo projects, no card required." },
+        { q: "Can I export my data?", a: "Always. Your data is yours, exportable any time." },
+        { q: "Do you offer SSO?", a: "SSO and SCIM are available on Team and above." },
+      ] },
+      cta("Ready to ship faster?", "Start free"),
+    ],
+  },
+  {
+    key: "agency",
+    words: ["agency", "studio", "creative", "branding", "design studio", "production", "collective", "consultancy", "marketing"],
+    theme: "dark",
+    pal: "violet",
+    font: "display",
+    radius: "soft",
+    nav: ["Work", "Studio", "Services", "Contact"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "editorial", eyebrow: "Independent creative studio", headline: "Make it unforgettable", sub: cap(prompt.trim() || `${name} is a creative studio crafting brands, films and experiences.`), cta: "See the work", media: "3d" },
+      marquee(["BRANDING", "MOTION", "WEB", "SPATIAL", "FILM", "STRATEGY"]),
+      { type: "features", variant: "rows", kicker: "What we do", title: "Services", items: [
+        { title: "Brand & identity", body: "Names, marks and systems with teeth — built to be remembered." },
+        { title: "Motion & film", body: "Story-led films and loops that earn the double-take." },
+        { title: "Web & spatial", body: "Real-time, scroll-driven experiences for screens of every size." },
+      ] },
+      { type: "gallery", variant: "grid", kicker: "Selected work", title: "Recent projects", items: [
+        { title: "Aurora", tag: "Brand" }, { title: "Halcyon", tag: "Film" }, { title: "Drift", tag: "Web" }, { title: "Monolith", tag: "Spatial" },
+      ] },
+      { type: "stats", kicker: "Track record", items: [
+        { value: "30+", label: "awards" }, { value: "120", label: "brands" }, { value: "15yr", label: "making" },
+      ] },
+      { type: "testimonials", kicker: "Clients say", items: [
+        { quote: "They gave us a brand people actually screenshot. Sales followed.", author: "Lena Ortiz", role: "Founder, Atelier Nine" },
+      ] },
+      cta("Let's build something worth sharing.", "Start a project"),
+    ],
+  },
+  {
+    key: "commerce",
+    words: ["shop", "store", "ecommerce", "product", "brand", "fashion", "sneaker", "drop", "retail", "apparel", "drink", "skincare cream", "candle", "jewellery", "jewelry"],
+    theme: "dark",
+    pal: "rose",
+    font: "display",
+    radius: "soft",
+    nav: ["Shop", "Lookbook", "About", "Cart"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "fullbleed", eyebrow: "New drop · Limited", headline: name, sub: cap(prompt.trim() || `${name} — made to be felt, limited by design.`), cta: "Shop the drop", media: "image" },
+      marquee(["NEW DROP", "FREE RETURNS", "SHIPS FAST", "LIMITED", "5-STAR"]),
+      { type: "gallery", variant: "grid", kicker: "The collection", title: "Shop the line", items: [
+        { title: "The Signature", tag: "Bestseller" }, { title: "The Limited", tag: "New" }, { title: "The Essential", tag: "Everyday" },
+      ] },
+      { type: "features", variant: "grid", kicker: "Why you'll love it", title: "Made to be felt", items: [
+        { title: "Made to last", body: "Engineered for the moment it lands in your hands." },
+        { title: "Limited by design", body: "Small batches, big presence. When it's gone, it's gone." },
+        { title: "Ships in 48h", body: "Carbon-neutral delivery, tracked end to end." },
+      ] },
+      { type: "testimonials", kicker: "Loved out loud", items: [
+        { quote: "Easily the best thing I've bought all year. The packaging alone.", author: "Jordan Vela", role: "Verified buyer" },
+      ] },
+      cta("Don't miss the drop.", "Shop now"),
+    ],
+  },
+  {
+    key: "wellness",
+    words: ["wellness", "health", "skincare", "spa", "yoga", "fitness", "gym", "meditation", "beauty", "mindfulness", "therapy", "retreat", "clinic"],
+    theme: "light",
+    pal: "sage",
+    font: "editorial",
+    radius: "pill",
+    nav: ["About", "Rituals", "Pricing", "Book"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "centered", eyebrow: "Slow down on purpose", headline: name, sub: cap(prompt.trim() || `${name} helps you feel like yourself again — a ritual, not a chore.`), cta: "Begin", media: "image" },
+      { type: "features", variant: "grid", kicker: "The difference", title: "Kind to everything", items: [
+        { title: "Backed by science", body: "Clinically-studied, nothing you can't pronounce." },
+        { title: "Kind to the planet", body: "Cruelty-free, reef-safe, refillable." },
+        { title: "A daily ritual", body: "The best ninety seconds of your morning." },
+      ] },
+      { type: "steps", kicker: "The ritual", title: "Three slow steps", items: [
+        { title: "Breathe", body: "Begin with one intentional moment." }, { title: "Apply", body: "A little goes a long way." }, { title: "Glow", body: "Show up as the calmest person in the room." },
+      ] },
+      { type: "stats", kicker: "Results", items: [
+        { value: "97%", label: "saw results in 2 weeks" }, { value: "0", label: "nasties, ever" }, { value: "1M+", label: "rituals a month" },
+      ] },
+      { type: "pricing", kicker: "Memberships", title: "Find your rhythm", tiers: [
+        { name: "Day pass", price: "$29", period: "", features: ["Single visit", "All facilities"], cta: "Book" },
+        { name: "Monthly", price: "$120", period: "/mo", features: ["Unlimited visits", "Guest passes", "Member events"], cta: "Join", featured: true },
+        { name: "Annual", price: "$1,100", period: "/yr", features: ["Everything monthly", "2 months free", "Priority booking"], cta: "Join" },
+      ] },
+      { type: "testimonials", kicker: "Members say", items: [
+        { quote: "Three weeks in and my skin — and honestly my mood — is different.", author: "Sana Iqbal", role: "Member" },
+      ] },
+      cta("Your calmest self is waiting.", "Begin today"),
+    ],
+  },
+  {
+    key: "event",
+    words: ["event", "conference", "summit", "festival", "meetup", "workshop", "launch event", "expo", "concert", "wedding", "gala"],
+    theme: "dark",
+    pal: "ocean",
+    font: "grotesk",
+    radius: "sharp",
+    nav: ["About", "Speakers", "Schedule", "Tickets"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "centered", eyebrow: "Sept 12–14 · London", headline: name, sub: cap(prompt.trim() || `${name} — three days of talks, workshops and the people building what's next.`), cta: "Get tickets", media: "3d" },
+      marquee(["3 DAYS", "40 SPEAKERS", "12 WORKSHOPS", "1 CITY"]),
+      { type: "team", kicker: "Speakers", title: "Who you'll hear from", items: [
+        { name: "Maya Chen", role: "VP Eng, Northwind" }, { name: "Dev Patel", role: "Founder, Lumen" }, { name: "Lena Ortiz", role: "Atelier Nine" }, { name: "Tomás Rivera", role: "Author" },
+      ] },
+      { type: "steps", kicker: "Schedule", title: "Three days", items: [
+        { title: "Day 1 — Foundations", body: "Keynotes and the state of the field." }, { title: "Day 2 — Deep dives", body: "Hands-on workshops in small rooms." }, { title: "Day 3 — What's next", body: "Demos, debates and the closing party." },
+      ] },
+      { type: "pricing", kicker: "Tickets", title: "Save your seat", tiers: [
+        { name: "Student", price: "$99", period: "", features: ["All talks", "Recordings"], cta: "Buy" },
+        { name: "General", price: "$349", period: "", features: ["All talks + workshops", "Lunch", "After-party"], cta: "Buy", featured: true },
+        { name: "Pro", price: "$699", period: "", features: ["Everything", "Front rows", "Speaker dinner"], cta: "Buy" },
+      ] },
+      { type: "faq", kicker: "FAQ", title: "Good to know", items: [
+        { q: "Are talks recorded?", a: "Yes — all ticket holders get recordings within 48 hours." },
+        { q: "Is there a refund policy?", a: "Full refunds up to 30 days before the event." },
+      ] },
+      cta("Be in the room.", "Get tickets"),
+    ],
+  },
+  {
+    key: "landing",
+    words: [],
+    theme: "dark",
+    pal: "acid",
+    font: "grotesk",
+    radius: "pill",
+    nav: ["Product", "Features", "Pricing", "Contact"],
+    build: ({ name, prompt }) => [
+      { type: "hero", variant: "split", eyebrow: "Introducing", headline: name, sub: cap(prompt.trim() || `${name} — a living, scroll-driven experience generated from a single sentence.`), cta: "Get started", media: "3d" },
+      marquee(["FAST", "BOLD", "REAL-TIME", "MADE WITH VOXEL", "ONE PROMPT"]),
+      { type: "features", variant: "rows", kicker: "Why it works", title: "Built different", items: [
+        { title: "One prompt, one site", body: "Describe it; watch it compose in real time." },
+        { title: "Yours to shape", body: "Tune type, colour, motion and structure live." },
+        { title: "Live in a click", body: "Publish to a real URL on the edge." },
+      ] },
+      { type: "stats", kicker: "By the numbers", items: [
+        { value: "60s", label: "to a live site" }, { value: "3", label: "steps" }, { value: "100%", label: "real-time" },
+      ] },
+      { type: "testimonials", kicker: "People say", items: [
+        { quote: "It made our site in the time it takes to write the brief.", author: "Dev Patel", role: "Founder" },
+      ] },
+      cta("Ready to make it unforgettable?", "Get started"),
+    ],
+  },
+];
+
+const DEFAULT_ARCHETYPE = ARCHETYPES[ARCHETYPES.length - 1];
+
+function detectArchetype(text: string): Archetype {
+  let best = DEFAULT_ARCHETYPE;
   let score = 0;
-  for (const ind of INDUSTRIES) {
-    const s = ind.words.reduce((n, w) => n + (text.includes(w) ? 1 : 0), 0);
+  for (const a of ARCHETYPES) {
+    const s = a.words.reduce((n, w) => n + (text.includes(w) ? 1 : 0), 0);
     if (s > score) {
       score = s;
-      best = ind;
+      best = a;
     }
   }
   return best;
 }
 
-function brandName(prompt: string, seed: number): string {
-  // prefer a Capitalised word the user wrote; else a coined name.
-  const capWord = prompt.split(/\s+/).find((w) => /^[A-Z][a-zA-Z]{2,}$/.test(w));
-  if (capWord) return capWord;
-  const coined = ["Atlas", "Nova", "Halo", "Vela", "Orbit", "Lumen", "Forge", "Drift", "Onyx", "Kit", "Aero", "Pulse"];
-  return coined[Math.abs(seed) % coined.length];
+function subjectOf(text: string): string {
+  if (/photograph/.test(text)) return "Photographer";
+  if (/illustrat/.test(text)) return "Illustrator";
+  if (/design/.test(text)) return "Designer";
+  if (/direct/.test(text)) return "Director";
+  if (/develop|engineer/.test(text)) return "Developer";
+  if (/architect/.test(text)) return "Architect";
+  return "Multidisciplinary";
 }
 
-/** Instant, deterministic SiteSpec — the zero-latency fallback. */
+const INDUSTRY_IMAGE: Record<string, string> = {
+  saas: "/cine/cyber.png", agency: "/cine/studio.png", wellness: "/cine/bloom.png",
+  restaurant: "/cine/studio.png", commerce: "/cine/bloom.png", portfolio: "/cine/studio.png",
+  event: "/cine/cyber.png", landing: "/cine/cyber.png",
+};
+
+/** Instant, deterministic, INTENT-AWARE SiteSpec — different prompts, different pages. */
 export function generateSiteSpec(prompt: string): SiteSpec {
   const text = (prompt || "").toLowerCase();
   const seed = hash(prompt.trim() || "voxel");
-  const scene = generateScene(prompt);
-  const ind = detectIndustry(text);
+  const arch = detectArchetype(text);
   const name = brandName(prompt, seed);
-  const benefit = ind.benefits[Math.abs(seed) % ind.benefits.length];
-  const noun = ind.nouns[Math.abs(seed >> 3) % ind.nouns.length];
+  const scene = generateScene(prompt);
+  scene.palette = { ...scene.palette, a: PAL[arch.pal].a, b: PAL[arch.pal].b };
 
-  const headline = cap(`${benefit}.`);
+  const blocks = arch.build({ prompt, name, seed, subject: subjectOf(text) });
   const tagline = prompt.trim() ? cap(prompt.trim().replace(/\.$/, "")) : `Meet ${name}`;
 
-  const sections: Section[] = [
-    { type: "marquee", items: ind.marquee },
-    {
-      type: "features",
-      kicker: "Why it works",
-      title: `Everything ${noun} should be`,
-      items: ind.features,
-    },
-    { type: "stats", kicker: "By the numbers", items: ind.stats },
-    {
-      type: "steps",
-      kicker: "How it works",
-      title: "Live in three steps",
-      items: ind.steps,
-    },
-    {
-      type: "showcase",
-      kicker: "Explore",
-      title: "A closer look",
-      items: ind.showcase,
-    },
-    { type: "quote", ...ind.quote },
-    { type: "cta", title: `Ready to ${benefit.replace(/\.$/, "")}?`, button: "Get started" },
-  ];
-
   return {
-    v: 2,
+    v: 3,
+    archetype: arch.key,
     scene,
-    image: INDUSTRY_IMAGE[ind.key] ?? "/cine/bloom.png",
-    industry: ind.key,
-    typeStyle: ind.type,
-    theme: INDUSTRY_THEME[ind.key] ?? "dark",
+    image: INDUSTRY_IMAGE[arch.key] ?? "/cine/cyber.png",
+    tokens: { theme: arch.theme, palette: PAL[arch.pal], font: arch.font, radius: arch.radius },
     brand: { name, tagline },
-    hero: {
-      eyebrow: `${cap(ind.key)} · ${scene.geometry}`,
-      headline,
-      sub: `${name} helps you ${benefit.replace(/\.$/, "")} — a real-time, scroll-driven experience generated from a single sentence.`,
-      cta: "Get started",
-    },
-    sections,
+    nav: { links: arch.nav, cta: pick(["Get in touch", "Start", "Book", "Get started"], seed) },
+    blocks,
+    industry: arch.key,
+    typeStyle: arch.font,
+    theme: arch.theme,
   };
 }
 
-/** Type guard for stored configs (old SceneConfig vs new SiteSpec). */
+/** Type guard for stored configs. */
 export function isSiteSpec(x: unknown): x is SiteSpec {
-  return !!x && typeof x === "object" && (x as SiteSpec).v === 2 && Array.isArray((x as SiteSpec).sections);
+  return !!x && typeof x === "object" && (x as SiteSpec).v === 3 && Array.isArray((x as SiteSpec).blocks);
 }
+
+export const ALL_BLOCK_TYPES: BlockType[] = [
+  "hero", "marquee", "logos", "statement", "features", "gallery", "menu",
+  "steps", "stats", "team", "testimonials", "pricing", "faq", "cta", "contact",
+];

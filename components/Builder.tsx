@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { SiteRenderer } from "./SiteRenderer";
 import { PRESETS, type SceneConfig, type Geometry, type Motion } from "@/lib/scenes";
-import { generateSiteSpec, type SiteSpec, type Section } from "@/lib/siteSpec";
+import { generateSiteSpec, type SiteSpec, type Block } from "@/lib/siteSpec";
 import { refineConfig } from "@/lib/refine";
 import { aiGenerate } from "@/lib/generateClient";
 import { publishSite } from "@/lib/sites";
@@ -21,7 +21,7 @@ const SWATCHES = [
 const REFINE_CHIPS = ["darker", "more energy", "chrome metal", "calmer & sparse", "melt the surface", "glassy"];
 type Tab = "customize" | "content" | "ship";
 
-const sectionLabel = (s: Section) => s.type;
+const blockLabel = (b: Block) => b.type;
 
 export function Builder({ initialPrompt }: { initialPrompt: string }) {
   const [spec, setSpecRaw] = useState<SiteSpec>(() => generateSiteSpec(initialPrompt || "a liquid chrome 3d hero"));
@@ -75,22 +75,26 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
 
   // ── editors ──────────────────────────────────────────────────────────────
   const setScene = (patch: Partial<SceneConfig>) => commit({ ...spec, scene: { ...spec.scene, ...patch } });
-  const setPalette = (a: string, b: string) => commit({ ...spec, scene: { ...spec.scene, palette: { ...spec.scene.palette, a, b } } });
-  const setHero = (patch: Partial<SiteSpec["hero"]>) => commit({ ...spec, hero: { ...spec.hero, ...patch } });
+  // palette drives the SITE (tokens) and the 3D scene together
+  const setPalette = (a: string, b: string) =>
+    commit({ ...spec, tokens: { ...spec.tokens, palette: { ...spec.tokens.palette, a, b } }, scene: { ...spec.scene, palette: { ...spec.scene.palette, a, b } } });
+  const setTheme = (theme: "light" | "dark") => commit({ ...spec, tokens: { ...spec.tokens, theme }, theme });
   const setBrand = (patch: Partial<SiteSpec["brand"]>) => commit({ ...spec, brand: { ...spec.brand, ...patch } });
-  const setTheme = (theme: "light" | "dark") => commit({ ...spec, theme });
-  const patchSection = (i: number, patch: Partial<Section>) =>
-    commit({ ...spec, sections: spec.sections.map((s, j) => (j === i ? ({ ...s, ...patch } as Section) : s)) });
-  const toggleSection = (i: number) => patchSection(i, { hidden: !spec.sections[i].hidden });
-  const moveSection = (i: number, dir: -1 | 1) => {
+  const heroIndex = spec.blocks.findIndex((b) => b.type === "hero");
+  const hero = heroIndex >= 0 ? (spec.blocks[heroIndex] as Extract<Block, { type: "hero" }>) : null;
+  const setHero = (patch: Partial<Extract<Block, { type: "hero" }>>) =>
+    heroIndex >= 0 && commit({ ...spec, blocks: spec.blocks.map((b, j) => (j === heroIndex ? ({ ...b, ...patch } as Block) : b)) });
+  const toggleBlock = (i: number) =>
+    commit({ ...spec, blocks: spec.blocks.map((b, j) => (j === i ? ({ ...b, hidden: !b.hidden } as Block) : b)) });
+  const moveBlock = (i: number, dir: -1 | 1) => {
     const j = i + dir;
-    if (j < 0 || j >= spec.sections.length) return;
-    const arr = [...spec.sections];
+    if (j < 0 || j >= spec.blocks.length) return;
+    const arr = [...spec.blocks];
     [arr[i], arr[j]] = [arr[j], arr[i]];
-    commit({ ...spec, sections: arr });
+    commit({ ...spec, blocks: arr });
   };
   const applyPreset = (p: SceneConfig) =>
-    commit({ ...spec, scene: { ...spec.scene, palette: { ...p.palette }, geometry: p.geometry, motion: p.motion, metal: p.metal, rough: p.rough, distort: p.distort, density: p.density, env: p.env } });
+    commit({ ...spec, tokens: { ...spec.tokens, palette: { ...spec.tokens.palette, a: p.palette.a, b: p.palette.b } }, scene: { ...spec.scene, palette: { ...p.palette }, geometry: p.geometry, motion: p.motion, metal: p.metal, rough: p.rough, distort: p.distort, density: p.density, env: p.env } });
 
   const regenerate = async (p = prompt, note = "⟳ regenerated") => {
     if (!p.trim()) return;
@@ -147,7 +151,7 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
           <Link href="/" data-cursor="hover" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ink-line"><span className="block h-3.5 w-3.5 rotate-45 border-2 border-cream" /></Link>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold leading-tight">{spec.brand.name}</div>
-            <div className="truncate text-[10px] uppercase tracking-[0.18em] text-cream-dim">{spec.industry} · {spec.theme ?? "dark"} · {config.geometry}</div>
+            <div className="truncate text-[10px] uppercase tracking-[0.18em] text-cream-dim">{spec.archetype} · {spec.tokens.theme} · {config.geometry}</div>
           </div>
         </div>
 
@@ -175,7 +179,7 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
               </Group>
 
               <Group label="Theme">
-                <Segmented options={["light", "dark"]} value={spec.theme ?? "dark"} onChange={(v) => setTheme(v as "light" | "dark")} />
+                <Segmented options={["light", "dark"]} value={spec.tokens.theme} onChange={(v) => setTheme(v as "light" | "dark")} />
               </Group>
 
               <Group label="Palette">
@@ -229,22 +233,24 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
                 <Field value={spec.brand.name} onChange={(v) => setBrand({ name: v })} placeholder="Brand name" />
                 <Field value={spec.brand.tagline} onChange={(v) => setBrand({ tagline: v })} placeholder="Tagline" />
               </Group>
-              <Group label="Hero">
-                <Field value={spec.hero.eyebrow} onChange={(v) => setHero({ eyebrow: v })} placeholder="Eyebrow" />
-                <Field value={spec.hero.headline} onChange={(v) => setHero({ headline: v })} placeholder="Headline" />
-                <Field value={spec.hero.sub} onChange={(v) => setHero({ sub: v })} placeholder="Subhead" textarea />
-                <Field value={spec.hero.cta} onChange={(v) => setHero({ cta: v })} placeholder="Button" />
-              </Group>
-              <Group label={`Sections · ${spec.sections.length}`}>
+              {hero && (
+                <Group label="Hero">
+                  <Field value={hero.eyebrow} onChange={(v) => setHero({ eyebrow: v })} placeholder="Eyebrow" />
+                  <Field value={hero.headline} onChange={(v) => setHero({ headline: v })} placeholder="Headline" />
+                  <Field value={hero.sub} onChange={(v) => setHero({ sub: v })} placeholder="Subhead" textarea />
+                  <Field value={hero.cta} onChange={(v) => setHero({ cta: v })} placeholder="Button" />
+                </Group>
+              )}
+              <Group label={`Sections · ${spec.blocks.length}`}>
                 <div className="flex flex-col gap-1.5">
-                  {spec.sections.map((s, i) => (
-                    <div key={i} className={`flex items-center gap-2 rounded-lg border border-ink-line px-3 py-2 ${s.hidden ? "opacity-40" : ""}`}>
+                  {spec.blocks.map((b, i) => (
+                    <div key={i} className={`flex items-center gap-2 rounded-lg border border-ink-line px-3 py-2 ${b.hidden ? "opacity-40" : ""}`}>
                       <div className="flex flex-col">
-                        <button onClick={() => moveSection(i, -1)} data-cursor="hover" className="text-[10px] leading-none text-cream-dim hover:text-cream">▲</button>
-                        <button onClick={() => moveSection(i, 1)} data-cursor="hover" className="text-[10px] leading-none text-cream-dim hover:text-cream">▼</button>
+                        <button onClick={() => moveBlock(i, -1)} data-cursor="hover" className="text-[10px] leading-none text-cream-dim hover:text-cream">▲</button>
+                        <button onClick={() => moveBlock(i, 1)} data-cursor="hover" className="text-[10px] leading-none text-cream-dim hover:text-cream">▼</button>
                       </div>
-                      <span className="flex-1 text-sm capitalize text-cream">{sectionLabel(s)}</span>
-                      <button onClick={() => toggleSection(i)} data-cursor="hover" className="text-sm text-cream-dim hover:text-cream" title={s.hidden ? "Show" : "Hide"}>{s.hidden ? "◌" : "●"}</button>
+                      <span className="flex-1 text-sm capitalize text-cream">{blockLabel(b)}</span>
+                      <button onClick={() => toggleBlock(i)} data-cursor="hover" className="text-sm text-cream-dim hover:text-cream" title={b.hidden ? "Show" : "Hide"}>{b.hidden ? "◌" : "●"}</button>
                     </div>
                   ))}
                 </div>
@@ -308,7 +314,7 @@ export function Builder({ initialPrompt }: { initialPrompt: string }) {
               </button>
             </div>
             <div className="relative flex-1 overflow-y-auto overscroll-contain">
-              <SiteRenderer key={config.id + spec.brand.name + (spec.theme ?? "")} spec={spec} watermark={false} />
+              <SiteRenderer key={config.id + spec.brand.name + spec.tokens.theme + spec.archetype} spec={spec} watermark={false} />
             </div>
           </div>
         </div>

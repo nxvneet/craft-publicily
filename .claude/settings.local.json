@@ -120,7 +120,10 @@
       "Bash(perl -0pi -e 's/initial=\\\\{\\\\{ y: 16, opacity: 0 \\\\}\\\\}/initial={NOANIM ? false : { y: 16, opacity: 0 }}/g' components/SiteRenderer.tsx)",
       "Bash(grep -E \"\\\\.env\\\\.local|\\\\.env$\")",
       "Bash(git check-ignore *)",
-      "Bash(echo \"commit $?\")"
+      "Bash(echo \"commit $?\")",
+      "Bash(git push *)",
+      "Bash(sed -i '' 's/const NOANIM = true;.*/const NOANIM = false;/' components/SiteRenderer.tsx)",
+      "Bash(sed -i '' 's|generateSiteSpec\\(\"an analytics saas for engineering teams\"\\)|generateSiteSpec\\(\"a living 3d website\"\\)|' \"app/s/[id]/page.tsx\")"
     ]
   }
 }
