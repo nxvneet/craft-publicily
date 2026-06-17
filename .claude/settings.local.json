@@ -123,7 +123,9 @@
       "Bash(echo \"commit $?\")",
       "Bash(git push *)",
       "Bash(sed -i '' 's/const NOANIM = true;.*/const NOANIM = false;/' components/SiteRenderer.tsx)",
-      "Bash(sed -i '' 's|generateSiteSpec\\(\"an analytics saas for engineering teams\"\\)|generateSiteSpec\\(\"a living 3d website\"\\)|' \"app/s/[id]/page.tsx\")"
+      "Bash(sed -i '' 's|generateSiteSpec\\(\"an analytics saas for engineering teams\"\\)|generateSiteSpec\\(\"a living 3d website\"\\)|' \"app/s/[id]/page.tsx\")",
+      "Bash(node -e \"console.log\\('framer-motion', require\\('framer-motion/package.json'\\).version\\); console.log\\('motion', require\\('motion/package.json'\\).version\\)\")",
+      "Bash(curl -s -o /dev/null -w \"/v3 %{http_code}\\\\n\" http://localhost:3210/v3)"
     ]
   }
 }
